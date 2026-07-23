@@ -1,7 +1,9 @@
-import { FlatList, Text, View } from "react-native";
+import { FlatList, StyleSheet, View } from "react-native";
 
+import { Surface } from "../../src/components/ui/Surface";
+import { Text } from "../../src/components/ui/Typography";
+import { colors } from "../../src/constants/theme";
 import { useDoseEvents } from "../../src/features/history/api";
-import { styles } from "../../src/constants/styles";
 import type { DoseEvent } from "../../src/types/api";
 
 const RESULT_LABEL: Record<DoseEvent["result"], string> = {
@@ -15,19 +17,29 @@ export default function HistoryScreen() {
   const { data: events, isLoading } = useDoseEvents();
 
   return (
-    <View style={styles.screen}>
+    <Surface>
       {isLoading && <Text>Loading…</Text>}
       <FlatList
         data={events ?? []}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <View style={styles.listItem}>
-            <Text>{RESULT_LABEL[item.result]}</Text>
-            <Text>{new Date(item.ts).toLocaleString()}</Text>
+            <Text variant="bodyMedium">{RESULT_LABEL[item.result]}</Text>
+            <Text variant="caption" color={colors.textMuted}>
+              {new Date(item.ts).toLocaleString()}
+            </Text>
           </View>
         )}
         ListEmptyComponent={!isLoading ? <Text>No verifications yet.</Text> : null}
       />
-    </View>
+    </Surface>
   );
 }
+
+const styles = StyleSheet.create({
+  listItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+});

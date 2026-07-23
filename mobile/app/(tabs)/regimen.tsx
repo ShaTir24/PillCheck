@@ -1,8 +1,11 @@
 import { useState } from "react";
-import { FlatList, Pressable, Text, TextInput, View } from "react-native";
+import { FlatList, StyleSheet, TextInput, View } from "react-native";
 
+import { Button } from "../../src/components/ui/Button";
+import { Surface } from "../../src/components/ui/Surface";
+import { Heading, Text } from "../../src/components/ui/Typography";
+import { colors, fonts, radius } from "../../src/constants/theme";
 import { useCreateMedication, useMedications } from "../../src/features/regimen/api";
-import { styles } from "../../src/constants/styles";
 
 // FR-5 regimen management. Reference-appearance picking ("Does your pill look
 // like this?", UF-4) and schedule-window editing are the next slice to add
@@ -13,15 +16,15 @@ export default function RegimenScreen() {
   const [drugName, setDrugName] = useState("");
 
   return (
-    <View style={styles.screen}>
-      <Text style={styles.title}>Your medications</Text>
+    <Surface>
+      <Heading level={2}>Your medications</Heading>
       {isLoading && <Text>Loading…</Text>}
       <FlatList
         data={medications ?? []}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <View style={styles.listItem}>
-            <Text>
+            <Text variant="bodyMedium">
               {item.drug_name} {item.strength}
             </Text>
           </View>
@@ -31,23 +34,39 @@ export default function RegimenScreen() {
       <TextInput
         style={styles.input}
         placeholder="Medication name"
+        placeholderTextColor={colors.textMuted}
         value={drugName}
         onChangeText={setDrugName}
         accessibilityLabel="Medication name"
       />
-      <Pressable
-        style={styles.button}
+      <Button
+        label="Add medication"
         disabled={!drugName || createMedication.isPending}
-        accessibilityRole="button"
         onPress={() =>
           createMedication.mutate(
             { drug_name: drugName, strength: null, form: null, ndc: null },
             { onSuccess: () => setDrugName("") }
           )
         }
-      >
-        <Text style={styles.buttonText}>Add medication</Text>
-      </Pressable>
-    </View>
+      />
+    </Surface>
   );
 }
+
+const styles = StyleSheet.create({
+  listItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    padding: 12,
+    fontSize: 16,
+    fontFamily: fonts.body,
+    minHeight: 48,
+    color: colors.text,
+  },
+});

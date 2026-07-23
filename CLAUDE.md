@@ -92,5 +92,6 @@ These ship with Claude Code by default (no install needed) and map to specific P
 | `engineering:tech-debt` | Periodic debt audit across phases | ongoing |
 | `pytorch-patterns` | Training pipeline, model architecture, and data-loading patterns for the detector/encoder/OCR models | Phase 1/2, §12 |
 | `add-feature` | Backend/mobile layering checklist for any new entity, endpoint, screen, or field | ongoing |
+| `mobile-design-system` | Color palette, typography (Playfair Display/Inter), WCAG-safe pairings, and celestial-background usage for any mobile screen | FR-8, §8 |
 
 Not pulled in: `fhir` / `clinical-trial-protocol-skill` (EHR integration is a v1 non-goal, §3), `mcp-builder`/`docx`/`pptx`/`sql-queries` (no MCP server, business docs, or SQL DB in this project's scope).
