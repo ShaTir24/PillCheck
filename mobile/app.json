@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "PillCheck",
+    "slug": "pillcheck",
+    "scheme": "pillcheck",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "PillCheck uses the camera to verify the pill in your hand against your schedule. Photos are processed on-device and are not uploaded unless you opt in."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["CAMERA"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "PillCheck uses the camera to verify the pill in your hand against your schedule. Photos are processed on-device and are not uploaded unless you opt in."
+        }
+      ]
+    ]
+  }
+}
