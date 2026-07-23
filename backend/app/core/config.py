@@ -14,6 +14,15 @@ class Settings(BaseSettings):
     environment: str = "local"
     api_v1_prefix: str = "/api/v1"
 
+    # Comma-separated. Only matters for the Expo web target — native app
+    # requests aren't subject to browser CORS. Defaults cover Metro's web
+    # dev server ports (8081 current default, 19006 legacy).
+    cors_allowed_origins: str = "http://localhost:8081,http://localhost:19006"
+
+    @property
+    def cors_allowed_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
+
 
 @lru_cache
 def get_settings() -> Settings:

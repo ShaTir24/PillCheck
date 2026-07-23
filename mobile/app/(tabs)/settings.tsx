@@ -1,11 +1,14 @@
-import { FlatList, Pressable, Text, View } from "react-native";
+import { FlatList, Pressable, StyleSheet, View } from "react-native";
 
+import { Button } from "../../src/components/ui/Button";
+import { Surface } from "../../src/components/ui/Surface";
+import { Heading, Text } from "../../src/components/ui/Typography";
+import { colors, surfaces } from "../../src/constants/theme";
 import {
   useCaregiverLinks,
   useInviteCaregiver,
   useRevokeCaregiverLink,
 } from "../../src/features/caregiver/api";
-import { styles } from "../../src/constants/styles";
 
 // UF-5 caregiver link management: sharing state always visible to the
 // subject, one-tap revoke. Accessibility toggles (FR-8: high-contrast, voice
@@ -16,35 +19,44 @@ export default function SettingsScreen() {
   const revokeCaregiverLink = useRevokeCaregiverLink();
 
   return (
-    <View style={styles.screen}>
-      <Text style={styles.title}>Caregiver sharing</Text>
+    <Surface>
+      <Heading level={2}>Caregiver sharing</Heading>
       {isLoading && <Text>Loading…</Text>}
       <FlatList
         data={links ?? []}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <View style={styles.listItem}>
-            <Text>Status: {item.status}</Text>
+            <Text variant="bodyMedium">Status: {item.status}</Text>
             {item.status !== "revoked" && (
               <Pressable
                 accessibilityRole="button"
                 onPress={() => revokeCaregiverLink.mutate(item.id)}
               >
-                <Text style={{ color: "#B3261E" }}>Revoke</Text>
+                <Text color={surfaces.danger.bg} variant="label">
+                  Revoke
+                </Text>
               </Pressable>
             )}
           </View>
         )}
         ListEmptyComponent={!isLoading ? <Text>No caregivers linked.</Text> : null}
       />
-      <Pressable
-        style={styles.button}
-        accessibilityRole="button"
+      <Button
+        label="Invite a caregiver"
+        variant="operational"
         disabled={inviteCaregiver.isPending}
         onPress={() => inviteCaregiver.mutate(["summary:read"])}
-      >
-        <Text style={styles.buttonText}>Invite a caregiver</Text>
-      </Pressable>
-    </View>
+      />
+    </Surface>
   );
 }
+
+const styles = StyleSheet.create({
+  listItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    gap: 4,
+  },
+});
