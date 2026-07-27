@@ -217,3 +217,83 @@ A gives the least code for the actual needs (local state is small — active pro
 
 ## Action Items
 1. [x] Scaffold store/query-client wiring in `mobile/src/lib`.
+
+---
+
+# ADR-006: Authentication — In-house (email/password) auth, replacing Supabase Auth
+
+**Status:** Proposed
+**Date:** 2026-07-26
+**Deciders:** Tirth Shah
+
+## Context
+ADR-001's action item 2 assumed Supabase Auth would be adopted once caregiver accounts (FR-11) were built; `app/core/security.py` already decodes a Supabase JWT and treats its `sub` claim as the profile id directly (identity == profile, 1:1). The user has now explicitly ruled out Supabase Auth and wants auth managed entirely by our own `users` table in Postgres, with signup, login, and forgot-password. This supersedes ADR-001 action item 2 — Supabase stays "just Postgres," no Auth product.
+
+This is one decision with four coupled parts: (1) how login identity relates to the existing `Profile` entity, (2) whether "role" is a stored field, (3) how password-reset email gets sent, (4) how sessions/tokens get invalidated. Bundled here because they're one feature, per the bundling style of ADR-002.
+
+## Decision
+
+**1. New `User` table, 1 : many `Profile`.** `users` (id, email unique, password_hash, token_version, password_reset_token_hash nullable, password_reset_expires_at nullable, timestamps) becomes the login identity. `profiles.user_id` FK is added (`NOT NULL`, `ondelete="CASCADE"`). Chosen over merging auth fields into `Profile` (1:1) to avoid a later migration when FR-12 (aide, multi-profile) is built — the column exists now even though it's unused beyond 1 profile/user until FR-12 ships.
+
+  **Scope guard for this ADR:** no router changes ship for multi-profile *selection*. `get_current_profile_id` still resolves to "the caller's one profile" (the profile created at signup) — every existing router (`medications`, `schedules`, `dose_events`, etc.) is untouched. Real profile-switching (which of several profiles is "active") is FR-12's job, not this one.
+
+**2. No stored role field.** Access control keeps deriving from relationships already in the schema: a profile always acts on its own data; cross-profile access requires an active `CaregiverLink` + its `scopes`. Nothing in the codebase yet checks a role, and the PRD personas aren't mutually exclusive per account (the same person can be a subject in one link and a caregiver in another) — a role enum would either duplicate `CaregiverLink.scopes` or be wrong the moment someone has both relationships.
+
+**3. Email sending behind a one-method interface.** `EmailSender` (ABC, mirrors the `Repository` ABC pattern in `app/repositories/base.py`) with `send_password_reset(to_email, reset_link)`. Concrete impl for now: `LoggingEmailSender` (logs the link — no provider is configured yet). Swapping in SES later is a new `SESEmailSender` class + one line of DI wiring in `app/api/deps.py`; `AuthService` and the router never change.
+
+**4. Stateless JWT + `token_version` counter — no sessions table.** Access (short-lived, ~15 min) and refresh (long-lived, ~30 days) tokens are both signed JWTs carrying `user_id` and `token_version`. Each `User` row has a `token_version` int; password reset (and a future explicit "log out everywhere") increments it, and every token is checked against the current value at verification time. Gives real revocation without a sessions table or cleanup job.
+
+`app/core/security.py`'s Supabase JWT decode path and the `X-Debug-Profile-Id` local-dev bypass are removed — logging in for local dev is now just calling `POST /auth/login`, so the bypass is no longer needed.
+
+## Options Considered
+
+### User↔Profile relationship
+| Option | Pros | Cons |
+|---|---|---|
+| **A. 1:many `User`→`Profile` (chosen)** | No future migration for FR-12; `profiles.user_id` ships now | Adds a column unused beyond cardinality 1 until FR-12 |
+| B. Merge auth fields into `Profile` (1:1) | Fewest tables now | FR-12 needs a real migration + data move later |
+
+### Role modeling
+| Option | Pros | Cons |
+|---|---|---|
+| **A. No role field, derive from relationships (chosen)** | No duplicate source of truth vs. `CaregiverLink.scopes`; matches "same person, multiple relationships" reality | Any future per-role UI copy/config still has to compute role from relationships |
+| B. Explicit `role` enum on `User` | Cheap to read in a JWT claim | Wrong the moment one account is both a subject and a caregiver; duplicates scopes |
+
+### Password-reset delivery
+| Option | Pros | Cons |
+|---|---|---|
+| **A. `EmailSender` interface, `LoggingEmailSender` now (chosen)** | SES drops in later with zero changes to `AuthService`/router; matches DIP already used for repositories | Reset emails don't actually send until SES impl is added |
+| B. Hardcode an SES call now | One less interface | SES isn't configured yet (no verified domain/API keys) — would ship dead/untestable code today |
+
+### Session/token invalidation
+| Option | Pros | Cons |
+|---|---|---|
+| **A. JWT + `token_version` (chosen)** | No new table, no cleanup job; matches existing stateless-JWT pattern | Can't revoke a *single* device, only "all sessions for this user" |
+| B. DB-backed refresh-token sessions table | Per-device revocation | New table + expiry cleanup job for a capability (per-device logout) nothing has asked for yet |
+
+## Trade-off Analysis
+Every "chosen" column above is the option that avoids inventing a mechanism (role enum, sessions table, live SES integration) the current feature set doesn't need, while the one place we *do* pay a small cost now (the `user_id` FK / 1:many shape) is paying for a migration we already know is coming (FR-12), not a hypothetical one. The email interface is the one abstraction added pre-emptively, and it's justified because the user confirmed SES is a near-term, named follow-up — not speculative.
+
+## Consequences
+- New table `users`; new column `profiles.user_id` (`NOT NULL`) — one Alembic revision. No existing data to backfill (no auth rows exist yet).
+- New dependency: `bcrypt` (password hashing) — `python-jose` (already a dependency) covers our own JWT signing/verification too, no new JWT library.
+- `app/core/config.py`: drop `supabase_jwt_secret`; add `auth_jwt_secret`, `auth_access_token_expire_minutes`, `auth_refresh_token_expire_days`.
+- `app/core/security.py`: `get_current_profile_id` reimplemented to decode our JWT, look up the token's user, resolve their one profile, and check `token_version`. Supabase decode path and `X-Debug-Profile-Id` deleted (`backend/CLAUDE.md`'s security.py non-negotiable note needs updating alongside this).
+- New router `app/api/v1/routers/auth.py`: `POST /auth/signup`, `/auth/login`, `/auth/refresh`, `/auth/forgot-password`, `/auth/reset-password`.
+- `POST /profiles` (today: "create the profile row for the caller's own auth identity") becomes "create the first/next profile owned by the caller's user" — still creates at most one profile per user for now; a second call is a latent multi-profile path FR-12 will formalize, not one this ADR builds UI/selection for.
+- Rate-limiting `/auth/forgot-password` and login attempts is a known gap, not built now (no rate-limiting exists anywhere in the app yet) — `# ponytail` marker at the endpoint, add if abuse shows up.
+- Mobile: needs login/signup/forgot-password/reset-password screens and token storage (`expo-secure-store`) — separate `add-feature`-style pass, not part of this ADR's backend action items below.
+
+## Action Items
+1. [ ] `app/models/user.py` — `User` model; add `user_id` FK to `app/models/profile.py`.
+2. [ ] Alembic revision: `users` table + `profiles.user_id` column.
+3. [ ] `app/schemas/auth.py` — `SignupRequest`, `LoginRequest`, `TokenResponse`, `ForgotPasswordRequest`, `ResetPasswordRequest`.
+4. [ ] `app/repositories/user.py` — `UserRepository` extends `SQLAlchemyRepository[User]`, add `get_by_email`.
+5. [ ] `app/core/security.py` — password hashing helpers (bcrypt), our-own JWT encode/decode, rewritten `get_current_profile_id`; delete Supabase decode + debug-header path.
+6. [ ] `app/core/email.py` — `EmailSender` ABC + `LoggingEmailSender`.
+7. [ ] `app/services/auth.py` — `AuthService`: signup, login, refresh, forgot_password, reset_password.
+8. [ ] `app/api/deps.py` — wire `get_auth_service`.
+9. [ ] `app/api/v1/routers/auth.py` — the five endpoints; register in `app/api/v1/router.py`.
+10. [ ] Unit tests against a fake `UserRepository` + fake `EmailSender` for `AuthService` (password verify, token_version bump on reset, expired-token rejection).
+11. [ ] Update `backend/CLAUDE.md`'s security.py non-negotiable note (Supabase bypass description is stale once this lands).
+12. [ ] `backend/.env.example` — replace `SUPABASE_JWT_SECRET` with `AUTH_JWT_SECRET` (+ expiry settings).

@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.deps import CurrentProfileId, get_profile_service
+from app.api.deps import CurrentProfileId, CurrentUser, get_profile_service
 from app.schemas.profile import ProfileCreate, ProfileRead, ProfileUpdate
 from app.services.profile import ProfileService
 
@@ -13,12 +13,11 @@ ProfileServiceDep = Annotated[ProfileService, Depends(get_profile_service)]
 
 @router.post("", response_model=ProfileRead, status_code=status.HTTP_201_CREATED)
 async def create_profile(
-    data: ProfileCreate, profile_id: CurrentProfileId, service: ProfileServiceDep
+    data: ProfileCreate, user: CurrentUser, service: ProfileServiceDep
 ) -> ProfileRead:
-    """Creates the profile row for the caller's own auth identity (id == auth
-    profile id, see app/core/security.py) — this is "register me", not
-    "create an arbitrary profile"."""
-    return await service.create(profile_id, data)  # type: ignore[return-value]
+    """Creates a profile owned by the caller's auth identity (ADR-006) — this is
+    "register my profile", not "create an arbitrary profile"."""
+    return await service.create(user.id, data)  # type: ignore[return-value]
 
 
 @router.get("/me", response_model=ProfileRead)

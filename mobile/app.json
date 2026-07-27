@@ -21,7 +21,9 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "permissions": ["CAMERA"]
+      "permissions": [
+        "CAMERA"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -33,7 +35,8 @@
         {
           "cameraPermission": "PillCheck uses the camera to verify the pill in your hand against your schedule. Photos are processed on-device and are not uploaded unless you opt in."
         }
-      ]
+      ],
+      "expo-secure-store"
     ]
   }
 }

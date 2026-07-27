@@ -1,9 +1,10 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
+import { StyleSheet } from "react-native";
 
 import { Button } from "../../src/components/ui/Button";
 import { Surface } from "../../src/components/ui/Surface";
-import { Text } from "../../src/components/ui/Typography";
-import { radius } from "../../src/constants/theme";
+import { Heading, Text } from "../../src/components/ui/Typography";
+import { colors, radius } from "../../src/constants/theme";
 import { useRecordDoseEvent } from "../../src/features/verify/api";
 
 // FR-1/FR-2/FR-3 (guided capture, detection, recognition) and the on-device
@@ -21,7 +22,10 @@ export default function VerifyScreen() {
   if (!permission.granted) {
     return (
       <Surface>
-        <Text>PillCheck needs camera access to verify your pills.</Text>
+        <Heading level={2}>Camera access needed</Heading>
+        <Text color={colors.textMuted}>
+          PillCheck needs camera access to verify your pills against tonight&apos;s dose.
+        </Text>
         <Button label="Grant camera access" onPress={requestPermission} />
       </Surface>
     );
@@ -29,7 +33,8 @@ export default function VerifyScreen() {
 
   return (
     <Surface>
-      <CameraView style={{ flex: 1, borderRadius: radius.lg }} facing="back" />
+      <Heading level={2}>Verify your dose</Heading>
+      <CameraView style={styles.camera} facing="back" />
       {/* Placeholder for FR-1's quality-gate-driven auto-capture; wire up
           once the on-device blur/exposure checks land. */}
       <Button
@@ -43,3 +48,7 @@ export default function VerifyScreen() {
     </Surface>
   );
 }
+
+const styles = StyleSheet.create({
+  camera: { flex: 1, borderRadius: radius.lg },
+});
