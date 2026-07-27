@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { FlatList, StyleSheet, TextInput, View } from "react-native";
+import { FlatList, StyleSheet, TextInput } from "react-native";
 
 import { Button } from "../../src/components/ui/Button";
+import { Card } from "../../src/components/ui/Card";
 import { Surface } from "../../src/components/ui/Surface";
 import { Heading, Text } from "../../src/components/ui/Typography";
-import { colors, fonts, radius } from "../../src/constants/theme";
+import { colors, fonts, radius, spacing } from "../../src/constants/theme";
 import { useCreateMedication, useMedications } from "../../src/features/regimen/api";
 
 // FR-5 regimen management. Reference-appearance picking ("Does your pill look
@@ -18,18 +19,24 @@ export default function RegimenScreen() {
   return (
     <Surface>
       <Heading level={2}>Your medications</Heading>
-      {isLoading && <Text>Loading…</Text>}
+      {isLoading && <Text color={colors.textMuted}>Loading…</Text>}
       <FlatList
         data={medications ?? []}
         keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.list}
         renderItem={({ item }) => (
-          <View style={styles.listItem}>
+          <Card>
             <Text variant="bodyMedium">
-              {item.drug_name} {item.strength}
+              {item.drug_name}
+              {item.strength ? ` ${item.strength}` : ""}
             </Text>
-          </View>
+          </Card>
         )}
-        ListEmptyComponent={!isLoading ? <Text>No medications yet.</Text> : null}
+        ListEmptyComponent={
+          !isLoading ? (
+            <Text color={colors.textMuted}>No medications yet — add your first one below.</Text>
+          ) : null
+        }
       />
       <TextInput
         style={styles.input}
@@ -54,11 +61,7 @@ export default function RegimenScreen() {
 }
 
 const styles = StyleSheet.create({
-  listItem: {
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
+  list: { gap: spacing.sm },
   input: {
     borderWidth: 1,
     borderColor: colors.border,

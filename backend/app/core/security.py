@@ -1,5 +1,9 @@
 import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from typing import Literal
 
+import bcrypt
 from fastapi import Header, HTTPException, status
 from jose import JWTError, jwt
 
@@ -9,19 +13,56 @@ settings = get_settings()
 
 _BEARER_PREFIX = "Bearer "
 
+TokenType = Literal["access", "refresh"]
 
-def _decode_supabase_jwt(token: str) -> uuid.UUID:
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+
+
+@dataclass
+class TokenPayload:
+    user_id: uuid.UUID
+    token_version: int
+
+
+def _create_token(
+    user_id: uuid.UUID, token_version: int, token_type: TokenType, expires_delta: timedelta
+) -> str:
+    now = datetime.now(UTC)
+    claims = {
+        "sub": str(user_id),
+        "tv": token_version,
+        "type": token_type,
+        "iat": now,
+        "exp": now + expires_delta,
+    }
+    return str(jwt.encode(claims, settings.auth_jwt_secret, algorithm="HS256"))
+
+
+def create_access_token(user_id: uuid.UUID, token_version: int) -> str:
+    expires_delta = timedelta(minutes=settings.auth_access_token_expire_minutes)
+    return _create_token(user_id, token_version, "access", expires_delta)
+
+
+def create_refresh_token(user_id: uuid.UUID, token_version: int) -> str:
+    return _create_token(
+        user_id, token_version, "refresh", timedelta(days=settings.auth_refresh_token_expire_days)
+    )
+
+
+def decode_token(token: str, expected_type: TokenType) -> TokenPayload:
     try:
-        payload = jwt.decode(
-            token,
-            settings.supabase_jwt_secret,
-            algorithms=["HS256"],
-            options={"verify_aud": False},
-        )
-        # Supabase Auth's `sub` claim is the auth user id. PillCheck treats it as the
-        # profile id directly (profile rows are keyed on the Supabase user id) rather
-        # than maintaining a separate auth<->profile mapping table.
-        return uuid.UUID(payload["sub"])
+        payload = jwt.decode(token, settings.auth_jwt_secret, algorithms=["HS256"])
+        if payload.get("type") != expected_type:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Wrong token type"
+            )
+        return TokenPayload(user_id=uuid.UUID(payload["sub"]), token_version=payload["tv"])
     except (JWTError, KeyError, ValueError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -29,33 +70,10 @@ def _decode_supabase_jwt(token: str) -> uuid.UUID:
         ) from exc
 
 
-async def get_current_profile_id(
-    authorization: str | None = Header(default=None),
-    x_debug_profile_id: str | None = Header(default=None),
-) -> uuid.UUID:
-    """Resolve the caller's profile id from a Supabase Auth bearer token.
-
-    Local dev escape hatch: with no SUPABASE_JWT_SECRET configured, an
-    X-Debug-Profile-Id header is accepted instead so the API is usable before
-    Supabase Auth is wired up on the mobile client. Refuses the header once a
-    secret is configured, so this never becomes an accidental prod bypass.
-    """
-    if not settings.supabase_jwt_secret:
-        if settings.environment != "local":
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="SUPABASE_JWT_SECRET is not configured",
-            )
-        if not x_debug_profile_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="X-Debug-Profile-Id header required in local dev without auth configured",
-            )
-        return uuid.UUID(x_debug_profile_id)
-
+def extract_bearer_token(authorization: str | None = Header(default=None)) -> str:
     if not authorization or not authorization.startswith(_BEARER_PREFIX):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing bearer token",
         )
-    return _decode_supabase_jwt(authorization[len(_BEARER_PREFIX) :])
+    return authorization[len(_BEARER_PREFIX) :]

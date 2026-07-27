@@ -9,7 +9,9 @@ class Settings(BaseSettings):
     database_url: str
     db_use_transaction_pooler: bool = False
 
-    supabase_jwt_secret: str = ""
+    auth_jwt_secret: str
+    auth_access_token_expire_minutes: int = 15
+    auth_refresh_token_expire_days: int = 30
 
     environment: str = "local"
     api_v1_prefix: str = "/api/v1"

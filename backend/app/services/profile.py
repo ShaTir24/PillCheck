@@ -9,8 +9,8 @@ class ProfileService:
     def __init__(self, repo: ProfileRepository) -> None:
         self.repo = repo
 
-    async def create(self, profile_id: uuid.UUID, data: ProfileCreate) -> Profile:
-        return await self.repo.add(Profile(id=profile_id, **data.model_dump()))
+    async def create(self, user_id: uuid.UUID, data: ProfileCreate) -> Profile:
+        return await self.repo.add(Profile(user_id=user_id, **data.model_dump()))
 
     async def get(self, profile_id: uuid.UUID) -> Profile | None:
         return await self.repo.get(profile_id)
