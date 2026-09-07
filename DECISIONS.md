@@ -297,3 +297,129 @@ Every "chosen" column above is the option that avoids inventing a mechanism (rol
 10. [ ] Unit tests against a fake `UserRepository` + fake `EmailSender` for `AuthService` (password verify, token_version bump on reset, expired-token rejection).
 11. [ ] Update `backend/CLAUDE.md`'s security.py non-negotiable note (Supabase bypass description is stale once this lands).
 12. [ ] `backend/.env.example` — replace `SUPABASE_JWT_SECRET` with `AUTH_JWT_SECRET` (+ expiry settings).
+
+---
+
+# ADR-007: ML Pipeline Phase 0 — Repo Layout, Data Versioning, Compute Strategy
+
+**Status:** Accepted
+**Date:** 2026-07-27
+**Deciders:** Tirth Shah
+
+## Context
+PillCheck's actual core — pill detection/recognition (PRD F1-F3, §10, §12) — had zero code before this ADR; `backend/` and `mobile/` only cover auth/regimen/design-system scaffolding. PRD §14 Phase 0 scopes "repo scaffolding, data ingest, eval harness reproducing the ePillID baseline protocol." This ADR covers where that code lives, how datasets are versioned, and the compute split — bundled as one decision (same style as ADR-006) since they're one feature: standing up Phase 0.
+
+User-confirmed constraints going in: no GPU available yet (CPU-only/undecided), and DVC (PRD §12's stated tool) is skipped in favor of a simpler approach for a solo-maintained project.
+
+## Decision
+
+1. **New top-level `ml/` package**, sibling to `backend/`/`mobile/`, own `CLAUDE.md`, separate `uv` environment (`pyproject.toml`) — heavy CV/ML deps (torch, timm) don't belong in the FastAPI service's env.
+2. **No DVC.** `ml/data/manifests/*.json` commits source URLs + sha256 + license notes per dataset; `ml/data/raw/` and `ml/data/processed/` are gitignored and rebuilt by scripts. Revisit DVC only if datasets start mutating or need cross-machine sharing — neither is true yet.
+3. **Compute split:** local CPU for data ingestion + eval (inference-only, confirmed cheap enough — the full Phase 0 baseline eval, 9,804-image gallery + 745-query test fold, ran in ~2m20s on a CPU-only laptop). GPU-training phases (Phase 1 encoder, Phase 2 detector) are explicitly deferred to a rented/free GPU (e.g. Colab) — not solved now since Phase 0 needs no training.
+4. **Detector license choice (PRD Q2, YOLOv8-AGPL vs RT-DETR) is deliberately not decided here** — PRD already scopes it as "blocking before Phase 2," and Phase 0 does no detection work.
+5. **Retrieval-based eval, not classification.** `ml/eval/metrics.py` measures top-k via nearest-embedding retrieval against a reference gallery (cosine similarity, plain numpy), matching the production architecture's ANN-lookup design (PRD §10.1) — appropriate since pill ID is low-shot (~1 reference image per class in ePillID).
+
+## Options Considered
+
+### Repo layout
+| Option | Pros | Cons |
+|---|---|---|
+| **A. New `ml/` top-level package (chosen)** | Matches existing `backend/`/`mobile/` per-area convention; clean env separation | One more top-level dir |
+| B. Put ML code inside `backend/` | Fewer top-level dirs | Backend's FastAPI env would carry torch/timm for no reason; conflates a request-serving service with an offline data/training pipeline |
+
+### Data versioning
+| Option | Pros | Cons |
+|---|---|---|
+| **A. Checksum-pinned manifests, no DVC (chosen)** | Zero new tooling/remote to maintain; datasets are public and stably re-downloadable | No diffing/versioning if a dataset is later locally modified |
+| B. DVC (PRD §12) | Matches the PRD's stated tool; real versioning + remote storage | Needs a configured remote (S3/GDrive) and adds a tool with no current job to do — over-provisioning for a solo project re-downloading stable public data |
+
+### Compute for Phase 0
+| Option | Pros | Cons |
+|---|---|---|
+| **A. Local CPU now, GPU deferred to when training starts (chosen)** | Phase 0 is inference-only — confirmed CPU-feasible by actually running it; no cost/setup until it's needed | Phase 1 will need a real GPU plan, not solved yet |
+| B. Set up a GPU environment now | Ready before Phase 1 | Solving a problem Phase 0 doesn't have — premature given no GPU is confirmed available |
+
+## Trade-off Analysis
+Every "chosen" option avoids standing up infrastructure (DVC remote, GPU environment, a detector-license decision) that Phase 0's actual scope doesn't need yet, while still shipping the one thing Phase 0 requires: a working, reproducible data-ingest-to-eval pipeline. Where PRD §12 names a specific tool (DVC) and this ADR deviates, the deviation is recorded with its trigger condition, not silently dropped.
+
+## Consequences (including findings discovered while scaffolding)
+
+- `ml/scripts/download_epillid.py` and `download_ndc.py` are fully automated (real, confirmed URLs — ePillID's GitHub release asset, and openFDA's `/download.json` metadata endpoint resolved at run time so a repartition doesn't silently break the script). Both were run for real; checksums are pinned in their manifests.
+- `ml/scripts/download_c3pi.py` and `download_pillbox.py` **cannot** auto-resolve a download URL — C3PI and Pillbox are both discontinued NLM datasets with no clean bulk-download API found by research. Both scripts refuse to guess and print where to resolve the link manually (`data/manifests/c3pi.json` / `pillbox.json`). This is a real, currently-open gap, not an oversight.
+- **FAISS + torch segfault together on macOS ARM** (a libomp conflict — hit directly during scaffolding, confirmed by isolating it, not assumed). `ml/eval/metrics.py` uses plain numpy instead; FAISS was also dropped from `ml/pyproject.toml`'s dependencies. Revisit FAISS if a later phase's gallery size actually needs approximate search — Phase 0/1 scale (thousands of vectors) doesn't.
+- **The live openFDA NDC directory cannot backfill ePillID's images**, confirmed empirically: ~0.5% of ePillID's package NDCs are still listed in the 2026 NDC export (checked at both package_ndc and product_ndc granularity) — most were delisted since ePillID's images are ~2016-2018 vintage. `join_metadata.py`'s NDC join is still correct and will matter for FR-5 (a user adding a *current* prescription), it just can't enrich these specific historical images. Real appearance metadata (SPLIMPRINT/SPLSHAPE/SPLCOLOR/SPLSIZE) for ePillID's pills has to come from Pillbox's own archived records (gap above), not the live NDC directory — confirmed the two are genuinely separate sources (a live NDC record has no imprint/shape/color/size fields at all).
+- Root `CLAUDE.md`'s Structure table now lists `ml/`.
+- Phase 0 exit criterion result: `make eval-baseline` (frozen `resnet18`, no fine-tuning, official ePillID test fold 4) scores top-1 14.6% / top-5 34.4%. This is a sanity-check number confirming the harness works end-to-end, not the paper's published SOTA (which needs their trained multi-head metric model) — pin the actual comparison target once the specific baseline row from the paper is chosen.
+
+## Action Items
+1. [x] Scaffold `ml/` (`CLAUDE.md`, `README.md`, `pyproject.toml`, `Makefile`, `data/manifests/`, `scripts/`, `eval/`).
+2. [x] `download_epillid.py`, `download_ndc.py` — implemented and run for real; checksums pinned.
+3. [ ] Resolve `c3pi.json` / `pillbox.json` download URLs manually, then run `download_c3pi.py` / `download_pillbox.py`.
+4. [x] `join_metadata.py`, `test_join.py`, `build_splits.py` — implemented and run for real against downloaded data.
+5. [x] `eval/harness.py`, `eval/baseline.py`, `eval/metrics.py` — implemented and run for real; Phase 0 exit-criterion number recorded above.
+6. [ ] Once Pillbox metadata is resolved, extend `join_metadata.py` to populate imprint/shape/color/size.
+7. [ ] Pin the specific ePillID paper baseline row to compare against for the "±1pt" exit criterion.
+
+---
+
+# ADR-008: Encoder Training Compute — Kaggle GPU, Backbone, Code/Data Transfer
+
+**Status:** Accepted
+**Date:** 2026-07-27
+**Deciders:** Tirth Shah
+
+## Context
+ADR-007 flagged "no GPU confirmed" as a Phase 1 risk and named Colab as the fallback without committing to it. The user has Kaggle GPU-provisioned instances already available, which resolves that open item. Per the user's explicit scope choice, this ADR covers only the GPU-critical path of PRD Phase 1: training the ArcFace metric-learning encoder and building the reference index from it. OCR fusion, calibration/abstention, and the Gradio demo (also Phase 1 items) need no GPU and are deliberately deferred to a separate pass.
+
+## Decision
+
+1. **Compute: Kaggle Notebooks, superseding ADR-007's Colab placeholder.** GPU-provisioned Kaggle instances the user already has access to; no new environment to provision.
+2. **Backbone: `convnext_tiny` (timm) + `ArcFaceLoss` (`pytorch-metric-learning`).** PRD §12 leaves ConvNeXt-T vs. EfficientNetV2-S open; with a real GPU now available, accuracy (G1's primary metric) is prioritized over footprint — footprint is addressed at Phase 3 export time via INT8 quantization regardless of backbone.
+3. **Training label = appearance class (`pilltype_id` + side), not `pilltype_id` alone** — matches the paper's own 9,804-class framing and gives the encoder more separating signal. Eval stays at the `pilltype_id` level (`eval/harness.py`, unchanged) since side doesn't matter for the product's MATCH decision.
+4. **Train/held-out split reuses ePillID's own fold files as-is**: train on all reference images + consumer folds 0-3; fold 4 (the same fold the Phase 0 baseline was scored on) stays untouched, so the before/after comparison is apples-to-apples. No new split-generation code.
+5. **Code reaches Kaggle as an uploaded Kaggle Dataset, not `git clone`** — avoids any credential/token handling regardless of the repo's visibility. `kaggle/train_encoder.ipynb` copies the (read-only) uploaded code to `/kaggle/working` first, since everything downstream (scripts, training, path resolution) is unmodified from how it runs locally.
+6. **Data reaches Kaggle by re-running `download_epillid.py`** inside the notebook (internet on) — reuses the already-working Phase 0 script instead of a separate upload path for a dataset that downloads in seconds on Kaggle's connection.
+7. **Checkpointing is real, not speculative**: `train/encoder.py` saves every epoch and accepts `--resume-from`, since Kaggle GPU sessions cap at ~9h.
+8. **FAISS is not used anywhere in this pipeline, including index-building** (`scripts/build_reference_index.py`) — see Consequences; confirmed empirically, not assumed, that this is a real conflict rather than a workaround-able ordering issue.
+9. **Getting the trained checkpoint off Kaggle is a manual step** (download via the notebook's Output tab) — no `kaggle` CLI/API-token automation, since that credential is the user's to hold.
+
+## Options Considered
+
+### Backbone
+| Option | Pros | Cons |
+|---|---|---|
+| **A. `convnext_tiny` (chosen)** | Strong fine-grained accuracy; PRD-sanctioned option; GPU now available so training cost isn't the constraint | Larger/slower than EfficientNetV2-S, both on CPU (measured: ~10x slower than resnet18 per batch) and likely at mobile export time |
+| B. `efficientnetv2_rw_s` | Designed for the 150MB/on-device footprint budget from the start | Deferred: footprint is a Phase 3 (quantization/export) problem, not a Phase 1 (accuracy) one — optimizing for it now is premature |
+
+### Reference index implementation
+| Option | Pros | Cons |
+|---|---|---|
+| **A. Plain numpy embeddings + labels, no FAISS (chosen)** | Verified during implementation that `import faiss` alone segfaults (OMP Error #15) once torch has been imported in the same process — even with zero concurrent use, contrary to this ADR's own earlier assumption that sequential use would be safe. Numpy is correct and fast enough at ~10k vectors. | No approximate-search structure — irrelevant at this scale |
+| B. FAISS `IndexFlatIP` in the same process as the embedding step | Matches "FAISS" as named in PRD §12 | Reproducibly segfaults on this machine; would require running index-building on Kaggle/Linux only, adding a platform constraint for no benefit at this scale |
+
+### Code transfer to Kaggle
+| Option | Pros | Cons |
+|---|---|---|
+| **A. Upload `ml/` as a Kaggle Dataset (chosen)** | Zero credential/token handling; works regardless of repo visibility | Manual re-upload when code changes |
+| B. `git clone` inside the notebook | No manual upload step; always current | Needs a PAT/deploy key if the repo is private — credential handling that's the user's to configure, not something to build assuming a status (public/private) that isn't confirmed |
+
+## Trade-off Analysis
+Every choice either reuses something already built (Phase 0's download script, the existing eval harness's retrieval metric) or avoids standing up a mechanism (git-clone auth, FAISS) that either isn't needed yet or was proven broken during this implementation. The one real cost accepted is `convnext_tiny`'s CPU slowness for local smoke-testing/eval — mitigated with `--limit` flags on the affected scripts rather than switching backbones to chase local CPU speed, since the actual constraint (training) is solved by moving to Kaggle GPU, not by picking a leaner model.
+
+## Consequences
+- New `ml/train/` (`dataset.py`, `encoder.py`) and `ml/configs/encoder.yaml` — Phase 0's `CLAUDE.md` note against scaffolding `train/`/`configs/` speculatively no longer applies; this is the phase that needs them.
+- `ml/eval/trained_encoder.py` — thin loader giving a trained checkpoint the same `(model, transform)` shape `eval/baseline.py` returns; `eval/harness.py` gained a `--checkpoint` flag and is otherwise unchanged.
+- `ml/scripts/build_reference_index.py` added; produces `gallery_embeddings.npy` + `gallery_labels.npy`, not a FAISS index file (see Options above).
+- `ml/pyproject.toml`: added `pytorch-metric-learning`. `faiss-cpu` was tried and removed again in the same session once the segfault was confirmed — it is not a dependency of this pipeline as of this ADR.
+- `kaggle/train_encoder.ipynb` added — the actual notebook to run on Kaggle (GPU + internet on, copies input dataset to a writable working dir, installs `timm`/`pytorch-metric-learning`, downloads ePillID, trains, points to where the checkpoint ends up).
+- Local CPU smoke tests passed for the full loop with an intentionally undertrained checkpoint (1 epoch, 64 samples): `train/encoder.py` → `eval/harness.py --checkpoint` → `scripts/build_reference_index.py --checkpoint`, all with `--limit`/`--limit-gallery` for speed. These prove the code paths work; they are not a real accuracy result.
+- **The actual GPU training run on Kaggle has not happened yet** — that's the one step in this pipeline only the user can execute (their GPU quota, their session). The before/after comparison against the Phase 0 baseline (top-1 14.6% / top-5 34.4%) is pending that run.
+
+## Action Items
+1. [x] `ml/train/dataset.py`, `encoder.py`, `ml/configs/encoder.yaml` — implemented, local CPU smoke test passed.
+2. [x] `ml/eval/trained_encoder.py`, `--checkpoint` flag on `eval/harness.py` — implemented, smoke test passed.
+3. [x] `ml/scripts/build_reference_index.py` — implemented, smoke test passed.
+4. [x] `kaggle/train_encoder.ipynb` — written; not yet run on Kaggle.
+5. [ ] **User: upload `ml/` (scripts/train/eval/configs) as a Kaggle Dataset, run `kaggle/train_encoder.ipynb` on a GPU instance, download the resulting checkpoint into `ml/outputs/encoder/latest.pt`.**
+6. [ ] Run `build_reference_index.py` and `eval/harness.py --checkpoint` on the real trained checkpoint; record the resulting top-1/top-5 here against the 14.6%/34.4% baseline.
+7. [ ] Follow-up pass (separate from this ADR): OCR fusion, calibration/abstention, Gradio demo.

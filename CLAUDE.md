@@ -67,6 +67,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 - [`backend/`](backend/) — FastAPI + SQLAlchemy(async) + Alembic, Postgres via Supabase. Conventions: [backend/CLAUDE.md](backend/CLAUDE.md).
 - [`mobile/`](mobile/) — Expo + TypeScript + Expo Router, the React Native client. Conventions: [mobile/CLAUDE.md](mobile/CLAUDE.md).
+- [`ml/`](ml/) — dataset ingest + eval harness for pill recognition (Phase 0; training comes later). Conventions: [ml/CLAUDE.md](ml/CLAUDE.md).
 - [`DECISIONS.md`](DECISIONS.md) — ADR log for stack/architecture choices (database, ORM, layering, mobile framework, state management).
 
 **Adding or changing a feature (backend entity, endpoint, screen, or field)?** Use the `add-feature` skill — it's the ordered, cross-cutting checklist that keeps both projects' layering (router→service→repository on the backend, route→hook→apiClient on mobile) and SOLID boundaries consistent as the codebase grows. Don't improvise a different structure for a new feature; extend the existing one.

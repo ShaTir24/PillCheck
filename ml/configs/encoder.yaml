@@ -1,0 +1,9 @@
+# Pinned encoder training defaults (PRD reproducibility NFR). Override any of
+# these from the CLI (ml/train/encoder.py --backbone ... etc) for one-off
+# experiments; update this file when a value becomes the new default.
+backbone: convnext_tiny
+embedding_dim: 512
+batch_size: 32
+lr: 1.0e-4
+epochs: 30
+seed: 42
