@@ -1,0 +1,9 @@
+{
+  "name": "pillbox",
+  "source": "https://datadiscovery.nlm.nih.gov/Chemicals-and-Drugs/Pillbox-Archived-Data/crzr-uvwg",
+  "images_url": "https://ftp.nlm.nih.gov/projects/pillbox/pillbox_production_images_full_202008.zip",
+  "metadata_download_url": null,
+  "sha256": null,
+  "license": "Retired NLM public dataset (retired 2021-01-28) — verify current license/reuse terms on the source page above.",
+  "notes": "Pillbox is the source of SPLIMPRINT/SPLSHAPE/SPLCOLOR/SPLSIZE/SPLSCORE (PRD §11.2) — these are NOT in the openFDA NDC directory (confirmed by inspecting a live NDC record). Pillbox's final image library is confirmed at images_url. Its bulk structured metadata (per-pill imprint/shape/color/size) was served historically via a REST API that's now retired; no confirmed bulk-download file was found by automated research. metadata_download_url must be resolved manually (check the NLM data-discovery page above, or the archived REST API docs) before scripts/join_metadata.py can attach imprint/shape/color/size fields — until then, join_metadata.py runs with NDC identity fields only and prints a warning for the missing appearance fields."
+}

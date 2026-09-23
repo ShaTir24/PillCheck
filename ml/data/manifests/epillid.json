@@ -1,0 +1,9 @@
+{
+  "name": "epillid",
+  "source": "https://github.com/usuyama/ePillID-benchmark",
+  "download_url": "https://github.com/usuyama/ePillID-benchmark/releases/download/ePillID_data_v1.0/ePillID_data.zip",
+  "sha256": "b960b3b1f0ee145ae2be7cfe188de1feaba4286b5d2fb7388004d151ad7311ac",
+  "expected_size_bytes": 160732055,
+  "license": "Repo code: MIT. README states: 'This dataset and software are released for research purposes only.' Verify this is acceptable for your intended use before bundling any images into a shipped product.",
+  "notes": "Contains folds/pilltypeid_nih_sidelbls0.01_metric_5folds/base/ with per-fold CSVs (0..4, last fold = official heldout test) and label_encoder_pytorch131.pickle. This is the OFFICIAL split protocol \u2014 eval/harness.py must use these files, not scripts/build_splits.py."
+}

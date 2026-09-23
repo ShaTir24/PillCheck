@@ -3,3 +3,12 @@
 
 # Claude Code — personal/session-local, not shared across contributors
 .claude/settings.local.json
+
+*.venv
+*.env
+
+data/raw/
+data/processed/
+__pycache__/
+*.pyc
+outputs/

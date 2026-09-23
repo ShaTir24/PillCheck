@@ -1,0 +1,16 @@
+{
+  "name": "ndc",
+  "source": "https://open.fda.gov/apis/drug/ndc/",
+  "metadata_url": "https://api.fda.gov/download.json",
+  "metadata_path": [
+    "results",
+    "drug",
+    "ndc",
+    "partitions",
+    0,
+    "file"
+  ],
+  "sha256": "7d46996e66c781b836746b433aadd63baca8d2d99d2a898ae7129e9952bb6290",
+  "license": "US Government work \u2014 public domain (openFDA terms of service).",
+  "notes": "download_ndc.py resolves the current export URL from metadata_url at run time (openFDA repartitions this periodically) instead of hardcoding it. Last resolved: https://download.open.fda.gov/drug/ndc/drug-ndc-0001-of-0001.json.zip (export_date 2026-07-25, 137402 records)."
+}

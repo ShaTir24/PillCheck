@@ -1,0 +1,9 @@
+{
+  "name": "c3pi",
+  "source": "https://healthdata.gov/dataset/Computational-Photography-Project-for-Pill-Identif/5vhs-kfa6",
+  "download_url": null,
+  "sha256": null,
+  "expected_size_bytes": 7301444403,
+  "license": "Not machine-resolvable from the healthdata.gov/data.gov API (no attachment metadata exposed) — verify manually on the landing page before use.",
+  "notes": "C3PI was discontinued in 2018; no API-exposed direct asset URL found for the ~6.8GB reference-images zip. download_c3pi.py refuses to guess a URL — resolve the current direct link from the source page above, then fill in download_url + sha256 here before running."
+}
